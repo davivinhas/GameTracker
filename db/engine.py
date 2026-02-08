@@ -1,13 +1,22 @@
 from sqlalchemy import create_engine
 import os
+from dotenv import load_dotenv
 
-engine = create_engine(
-    # String de conexão (alterar pra correta)
-    "sqlite:///meu_banco.db",  # SQLite local
+load_dotenv()
 
-    # Parâmetros de configuração:
-    echo=True,  # Mostra SQL gerado no console
-    pool_size=5,  # Número de conexões no pool
-    max_overflow=10,  # Conexões extras permitidas
-    pool_recycle=3600,  # Recicla conexões a cada 1 hora
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        echo=True,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        echo=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=3600,
+    )

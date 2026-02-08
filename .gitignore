@@ -1,4 +1,4 @@
 .env
 .venv
-meu_banco.db
+gametrackerDB.db
 *.http
