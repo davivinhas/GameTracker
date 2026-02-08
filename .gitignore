@@ -1,0 +1,4 @@
+.env
+.venv
+meu_banco.db
+*.http
