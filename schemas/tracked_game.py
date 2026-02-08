@@ -1,22 +1,32 @@
 from pydantic import BaseModel
-from core.enums.StoreEnum import StoreEnum
+from typing import Optional
 from datetime import datetime
 
-
-class TrackedGameCreate(BaseModel):
+class TrackedGameBase(BaseModel):
     title: str
-    store: StoreEnum
+    platform: str
     external_id: str
+    price: float
+    original_price: Optional[float] = None
+    discount_percentage: float = 0.0
+    url: str
+    image_url: Optional[str] = None
+    is_on_sale: bool = False
 
 
-class TrackedGameResponse(BaseModel):
+class TrackedGameUpdate(BaseModel):
+    price: Optional[float] = None
+    original_price: Optional[float] = None
+    discount_percentage: Optional[float] = None
+    is_on_sale: Optional[bool] = None
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class TrackedGameResponse(TrackedGameBase):
     id: int
-    title: str
-    store: StoreEnum
-    external_id: str
-    current_price: float | None
-    last_checked_at: datetime | None
+    last_checked: datetime
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
