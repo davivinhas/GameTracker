@@ -1,16 +1,19 @@
-# services/cheapshark_service.py
 import httpx
 from typing import List, Optional, Dict
-from schemas.cheak_shark import CheapSharkDeal
 from schemas.game_data import GameData
 import os
 
 CHEAP_SHARK_URL = os.getenv("CHEAP_SHARK_URL")
+CHEAP_SHARK_BASE_URL = os.getenv("CHEAP_SHARK_BASE_URL")
+
 
 class CheapSharkService:
-    BASE_URL = os.getenv("CHEAP_SHARK_BASE_URL")
+    if not CHEAP_SHARK_BASE_URL:
+        raise RuntimeError("CHEAP_SHARK_BASE_URL is not set")
 
-    # Mapeamento de store IDs para nomes
+    BASE_URL = CHEAP_SHARK_BASE_URL
+
+    # Mapeamento de store IDs para nomes (fallback)
     STORES = {
         "1": "Steam",
         "2": "GamersGate",
@@ -42,21 +45,19 @@ class CheapSharkService:
 
             result = []
             for game in games:
-                # Pega o melhor deal do jogo
                 cheapest_price = float(game.get("cheapest", 0))
-                normal_price = float(game.get("normalPrice", cheapest_price))
-                savings = float(game.get("cheapestDealID", "0"))
+                normal_price = float(game.get("normalPrice", cheapest_price)) if game.get("normalPrice") else None
 
                 result.append(GameData(
                     title=game["external"],
-                    platform="Multiple",  # CheapShark agrega várias stores
-                    external_id=game["gameID"],
+                    game_id=game.get("gameID"),
+                    deal_id=game.get("cheapestDealID"),
                     price=cheapest_price,
-                    original_price=normal_price if cheapest_price < normal_price else None,
-                    discount_percentage=round((1 - cheapest_price / normal_price) * 100, 2) if normal_price > 0 else 0,
-                    url=f"{CHEAP_SHARK_URL}{game.get('cheapestDealID')}",
+                    original_price=normal_price,
+                    discount_percentage=round((1 - cheapest_price / normal_price) * 100, 2) if normal_price and normal_price > 0 else 0,
+                    url=f"{CHEAP_SHARK_URL}{game.get('cheapestDealID')}" if CHEAP_SHARK_URL else None,
                     image_url=game.get("thumb"),
-                    is_on_sale=cheapest_price < normal_price
+                    is_on_sale=bool(normal_price and cheapest_price < normal_price)
                 ))
 
             return result
@@ -98,12 +99,13 @@ class CheapSharkService:
 
                 result.append(GameData(
                     title=deal["title"],
-                    platform=self.STORES.get(store_id, f"Store {store_id}"),
-                    external_id=deal["dealID"],
+                    deal_id=deal["dealID"],
+                    store_id=store_id,
+                    store_name=self.STORES.get(store_id, f"Store {store_id}"),
                     price=sale_price,
                     original_price=normal_price,
                     discount_percentage=round(savings, 2),
-                    url=f"{CHEAP_SHARK_URL}{deal['dealID']}",
+                    url=f"{CHEAP_SHARK_URL}{deal['dealID']}" if CHEAP_SHARK_URL else None,
                     image_url=deal.get("thumb"),
                     is_on_sale=True
                 ))
@@ -133,15 +135,57 @@ class CheapSharkService:
 
             return GameData(
                 title=data["info"]["title"],
-                platform=self.STORES.get(best_deal["storeID"], "Unknown"),
-                external_id=best_deal["dealID"],
+                game_id=game_id,
+                deal_id=best_deal["dealID"],
+                store_id=best_deal["storeID"],
+                store_name=self.STORES.get(best_deal["storeID"], "Unknown"),
                 price=sale_price,
                 original_price=retail_price,
                 discount_percentage=round(savings, 2),
-                url=f"{CHEAP_SHARK_URL}{best_deal['dealID']}",
+                url=f"{CHEAP_SHARK_URL}{best_deal['dealID']}" if CHEAP_SHARK_URL else None,
                 image_url=data["info"].get("thumb"),
                 is_on_sale=savings > 0
             )
+
+    async def get_game_deals(self, game_id: str) -> Optional[Dict]:
+        """Obtém todas as ofertas (deals) de um jogo"""
+        async with httpx.AsyncClient() as client:
+            params = {"id": game_id}
+            response = await client.get(f"{self.BASE_URL}/games", params=params)
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+
+            if not data.get("deals"):
+                return None
+
+            title = data["info"]["title"]
+            image_url = data["info"].get("thumb")
+            deals = []
+            for deal in data["deals"]:
+                sale_price = float(deal["price"])
+                retail_price = float(deal.get("retailPrice", sale_price))
+                savings = float(deal.get("savings", 0))
+                store_id = deal.get("storeID")
+                deal_id = deal.get("dealID")
+
+                deals.append(GameData(
+                    title=title,
+                    game_id=game_id,
+                    deal_id=deal_id,
+                    store_id=store_id,
+                    store_name=self.STORES.get(store_id, f"Store {store_id}") if store_id else None,
+                    price=sale_price,
+                    original_price=retail_price,
+                    discount_percentage=round(savings, 2),
+                    url=f"{CHEAP_SHARK_URL}{deal_id}" if (CHEAP_SHARK_URL and deal_id) else None,
+                    image_url=image_url,
+                    is_on_sale=savings > 0
+                ))
+
+            return {"title": title, "image_url": image_url, "deals": deals}
 
     async def get_deal_by_id(self, deal_id: str) -> Optional[GameData]:
         """Obtém detalhes de um deal específico"""
@@ -160,12 +204,14 @@ class CheapSharkService:
 
             return GameData(
                 title=deal["gameInfo"]["name"],
-                platform=self.STORES.get(deal["gameInfo"]["storeID"], "Unknown"),
-                external_id=deal_id,
+                game_id=deal["gameInfo"].get("gameID"),
+                deal_id=deal_id,
+                store_id=deal["gameInfo"].get("storeID"),
+                store_name=self.STORES.get(deal["gameInfo"].get("storeID"), "Unknown"),
                 price=sale_price,
                 original_price=retail_price,
                 discount_percentage=round(savings, 2),
-                url=f"{CHEAP_SHARK_URL}{deal_id}",
+                url=f"{CHEAP_SHARK_URL}{deal_id}" if CHEAP_SHARK_URL else None,
                 image_url=deal["gameInfo"].get("thumb"),
                 is_on_sale=savings > 0
             )
