@@ -1,15 +1,37 @@
 # main.py
+import asyncio
+import os
+import contextlib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from db.Base import Base
-from db.engine import engine
+from db.engine import engine, SessionLocal
+import db.models  # noqa: F401
 from routes import tracked_games_routes
+from services.game_aggregator_service import GameAggregatorService
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    yield
+    interval_seconds = int(os.getenv("PRICE_UPDATE_INTERVAL_SECONDS", "1800"))
+
+    async def price_update_loop():
+        while True:
+            db = SessionLocal()
+            try:
+                service = GameAggregatorService(db)
+                await service.update_all_tracked_deals()
+            finally:
+                db.close()
+            await asyncio.sleep(interval_seconds)
+
+    task = asyncio.create_task(price_update_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 app = FastAPI(
     title="Game Price Tracker API",
