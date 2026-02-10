@@ -2,3 +2,5 @@
 .venv
 gametrackerDB.db
 *.http
+__pycache__/
+*.pyc
