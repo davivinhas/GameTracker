@@ -1,6 +1,8 @@
 import httpx
 from typing import List, Optional, Dict
+import time
 from schemas.game_data import GameData
+from schemas.game_search import GameSearchResponse
 import os
 
 CHEAP_SHARK_URL = os.getenv("CHEAP_SHARK_URL")
@@ -13,22 +15,28 @@ class CheapSharkService:
 
     BASE_URL = CHEAP_SHARK_BASE_URL
 
-    # Mapeamento de store IDs para nomes (fallback)
-    STORES = {
-        "1": "Steam",
-        "2": "GamersGate",
-        "3": "GreenManGaming",
-        "7": "GOG",
-        "8": "Origin",
-        "11": "Humble Store",
-        "13": "Uplay",
-        "15": "Fanatical",
-        "25": "Epic Games Store",
-        "27": "Gamesplanet",
-        "28": "Voidu",
-        "29": "Epic Games Store",
-        "30": "GameBillet",
-    }
+    _store_cache: Dict[str, str] = {}
+    _store_cache_loaded_at: float = 0.0
+    _store_cache_ttl_seconds: int = 60 * 60 * 24
+
+    async def _load_store_cache(self) -> None:
+        """Carrega e cacheia o mapeamento storeID -> storeName"""
+        now = time.time()
+        if self._store_cache and (now - self._store_cache_loaded_at) < self._store_cache_ttl_seconds:
+            return
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{self.BASE_URL}/stores")
+            stores = response.json()
+
+        self._store_cache = {s["storeID"]: s["storeName"] for s in stores}
+        self._store_cache_loaded_at = now
+
+    async def _get_store_name(self, store_id: Optional[str]) -> Optional[str]:
+        if not store_id:
+            return None
+        await self._load_store_cache()
+        return self._store_cache.get(store_id)
 
     async def get_stores(self) -> List[Dict]:
         """Lista todas as stores disponíveis"""
@@ -36,7 +44,7 @@ class CheapSharkService:
             response = await client.get(f"{self.BASE_URL}/stores")
             return response.json()
 
-    async def search_games(self, title: str, limit: int = 10) -> List[GameData]:
+    async def search_games(self, title: str, limit: int = 10) -> List[GameSearchResponse]:
         """Busca jogos por título"""
         async with httpx.AsyncClient() as client:
             params = {"title": title, "limit": limit}
@@ -46,18 +54,15 @@ class CheapSharkService:
             result = []
             for game in games:
                 cheapest_price = float(game.get("cheapest", 0))
-                normal_price = float(game.get("normalPrice", cheapest_price)) if game.get("normalPrice") else None
-
-                result.append(GameData(
+                result.append(GameSearchResponse(
                     title=game["external"],
                     game_id=game.get("gameID"),
                     deal_id=game.get("cheapestDealID"),
                     price=cheapest_price,
-                    original_price=normal_price,
-                    discount_percentage=round((1 - cheapest_price / normal_price) * 100, 2) if normal_price and normal_price > 0 else 0,
+                    discount_percentage=0.0,
                     url=f"{CHEAP_SHARK_URL}{game.get('cheapestDealID')}" if CHEAP_SHARK_URL else None,
                     image_url=game.get("thumb"),
-                    is_on_sale=bool(normal_price and cheapest_price < normal_price)
+                    is_on_sale=False
                 ))
 
             return result
@@ -97,11 +102,12 @@ class CheapSharkService:
                 if savings < min_discount:
                     continue
 
+                store_name = await self._get_store_name(store_id)
                 result.append(GameData(
                     title=deal["title"],
                     deal_id=deal["dealID"],
                     store_id=store_id,
-                    store_name=self.STORES.get(store_id, f"Store {store_id}"),
+                    store_name=store_name or f"Store {store_id}",
                     price=sale_price,
                     original_price=normal_price,
                     discount_percentage=round(savings, 2),
@@ -133,12 +139,13 @@ class CheapSharkService:
             retail_price = float(best_deal["retailPrice"])
             savings = float(best_deal["savings"])
 
+            store_name = await self._get_store_name(best_deal["storeID"])
             return GameData(
                 title=data["info"]["title"],
                 game_id=game_id,
                 deal_id=best_deal["dealID"],
                 store_id=best_deal["storeID"],
-                store_name=self.STORES.get(best_deal["storeID"], "Unknown"),
+                store_name=store_name or "Unknown",
                 price=sale_price,
                 original_price=retail_price,
                 discount_percentage=round(savings, 2),
@@ -171,12 +178,13 @@ class CheapSharkService:
                 store_id = deal.get("storeID")
                 deal_id = deal.get("dealID")
 
+                store_name = await self._get_store_name(store_id)
                 deals.append(GameData(
                     title=title,
                     game_id=game_id,
                     deal_id=deal_id,
                     store_id=store_id,
-                    store_name=self.STORES.get(store_id, f"Store {store_id}") if store_id else None,
+                    store_name=store_name or (f"Store {store_id}" if store_id else None),
                     price=sale_price,
                     original_price=retail_price,
                     discount_percentage=round(savings, 2),
@@ -202,12 +210,13 @@ class CheapSharkService:
             retail_price = float(deal["gameInfo"]["retailPrice"])
             savings = ((retail_price - sale_price) / retail_price * 100) if retail_price > 0 else 0
 
+            store_name = await self._get_store_name(deal["gameInfo"].get("storeID"))
             return GameData(
                 title=deal["gameInfo"]["name"],
                 game_id=deal["gameInfo"].get("gameID"),
                 deal_id=deal_id,
                 store_id=deal["gameInfo"].get("storeID"),
-                store_name=self.STORES.get(deal["gameInfo"].get("storeID"), "Unknown"),
+                store_name=store_name or "Unknown",
                 price=sale_price,
                 original_price=retail_price,
                 discount_percentage=round(savings, 2),
