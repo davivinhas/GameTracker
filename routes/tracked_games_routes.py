@@ -7,6 +7,7 @@ from schemas.game import GameResponse
 from schemas.deal import DealResponse
 from schemas.price_history import PriceHistoryResponse
 from schemas.game_data import GameData
+from schemas.game_search import GameSearchResponse
 from schemas.game_lookup import GameLookupResponse
 from schemas.price_change import GamePriceChangeResponse
 from services.game_aggregator_service import GameAggregatorService
@@ -15,7 +16,7 @@ from services.cheap_shark_service import CheapSharkService
 router = APIRouter(prefix="/games", tags=["games"])
 
 
-@router.get("/search", response_model=List[GameData])
+@router.get("/search", response_model=List[GameSearchResponse])
 async def search_games(
         q: str = Query(..., description="Nome do jogo para buscar"),
         limit: int = Query(10, ge=1, le=60),

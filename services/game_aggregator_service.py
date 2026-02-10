@@ -7,6 +7,7 @@ from repositories.game_repository import GameRepository
 from repositories.deal_repository import DealRepository
 from repositories.price_history_repository import PriceHistoryRepository
 from schemas.game_data import GameData
+from schemas.game_search import GameSearchResponse
 from schemas.price_change import GamePriceChangeResponse, DealPriceChange, BestPriceChange
 
 
@@ -18,7 +19,7 @@ class GameAggregatorService:
         self.history = PriceHistoryRepository(db)
         self.cheapshark = CheapSharkService()
 
-    async def search_games(self, query: str, limit: int = 10) -> List[GameData]:
+    async def search_games(self, query: str, limit: int = 10) -> List[GameSearchResponse]:
         """Busca jogos na CheapShark"""
         return await self.cheapshark.search_games(query, limit)
 
