@@ -5,6 +5,8 @@ from schemas.game_data import GameData
 from schemas.game_lookup import GameLookupResponse
 from schemas.game_search import GameSearchResponse
 from schemas.price_change import GamePriceChangeResponse, DealPriceChange, BestPriceChange
+from schemas.monitoring import MonitoringStats, GameCheckResult, MonitoringResponse
+from schemas.price_alert import PriceAlertResponse
 
 __all__ = [
     "GameResponse",
@@ -16,4 +18,8 @@ __all__ = [
     "GamePriceChangeResponse",
     "DealPriceChange",
     "BestPriceChange",
+    "MonitoringStats",
+    "GameCheckResult",
+    "MonitoringResponse",
+    "PriceAlertResponse",
 ]
