@@ -5,11 +5,11 @@ import contextlib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from db.Base import Base
-from db.engine import engine, SessionLocal
+from db.engine import SessionLocal
 import db.models  # noqa: F401
 from routes import tracked_games_routes
 from services.game_aggregator_service import GameAggregatorService
+from schemas.responses import RootResponse
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -51,10 +51,10 @@ app.add_middleware(
 
 app.include_router(tracked_games_routes.router)
 
-@app.get("/")
+@app.get("/", response_model=RootResponse)
 def read_root():
-    return {
-        "message": "Game Price Tracker API",
-        "docs": "/docs",
-        "stores": "/games/stores"
-    }
+    return RootResponse(
+        message="Game Price Tracker API",
+        docs="/docs",
+        stores="/games/stores"
+    )

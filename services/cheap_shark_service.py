@@ -3,6 +3,7 @@ from typing import List, Optional, Dict
 import time
 from schemas.game_data import GameData
 from schemas.game_search import GameSearchResponse
+from schemas.game_lookup import GameLookupResponse
 import os
 
 CHEAP_SHARK_URL = os.getenv("CHEAP_SHARK_URL")
@@ -154,8 +155,13 @@ class CheapSharkService:
                 is_on_sale=savings > 0
             )
 
-    async def get_game_deals(self, game_id: str) -> Optional[Dict]:
-        """Obtém todas as ofertas (deals) de um jogo"""
+    async def get_game_deals(self, game_id: str) -> Optional[GameLookupResponse]:
+        """
+        Obtém todas as ofertas (deals) de um jogo
+
+        Returns:
+            GameDealsResponse: Schema Pydantic com title, image_url e deals
+        """
         async with httpx.AsyncClient() as client:
             params = {"id": game_id}
             response = await client.get(f"{self.BASE_URL}/games", params=params)
@@ -171,6 +177,7 @@ class CheapSharkService:
             title = data["info"]["title"]
             image_url = data["info"].get("thumb")
             deals = []
+
             for deal in data["deals"]:
                 sale_price = float(deal["price"])
                 retail_price = float(deal.get("retailPrice", sale_price))
@@ -193,7 +200,11 @@ class CheapSharkService:
                     is_on_sale=savings > 0
                 ))
 
-            return {"title": title, "image_url": image_url, "deals": deals}
+            return GameLookupResponse(
+                title=title,
+                image_url=image_url,
+                deals=deals
+            )
 
     async def get_deal_by_id(self, deal_id: str) -> Optional[GameData]:
         """Obtém detalhes de um deal específico"""

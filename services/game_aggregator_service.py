@@ -1,5 +1,5 @@
 # services/game_aggregator_service.py
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from services.cheap_shark_service import CheapSharkService
@@ -8,6 +8,7 @@ from repositories.deal_repository import DealRepository
 from repositories.price_history_repository import PriceHistoryRepository
 from schemas.game_data import GameData
 from schemas.game_search import GameSearchResponse
+from schemas.game_lookup import GameLookupResponse
 from schemas.price_change import GamePriceChangeResponse, DealPriceChange, BestPriceChange
 
 
@@ -33,7 +34,7 @@ class GameAggregatorService:
         """Obtém promoções"""
         return await self.cheapshark.get_deals(store_id, min_discount, max_price, limit)
 
-    async def lookup_game_by_title(self, title: str) -> Optional[dict]:
+    async def lookup_game_by_title(self, title: str) -> Optional[GameLookupResponse]:
         """Busca um jogo por nome e retorna todas as ofertas"""
         results = await self.cheapshark.search_games(title, limit=1)
         if not results:
@@ -110,13 +111,14 @@ class GameAggregatorService:
                 "image_url": results[0].image_url,
             })
 
-        deals_data = await self.cheapshark.get_game_deals(game_id)
-        if not deals_data:
+        deals_response = await self.cheapshark.get_game_deals(game_id)
+        if not deals_response:
             return None
 
         created_deals = 0
         now = datetime.now(timezone.utc)
-        for deal in deals_data["deals"]:
+
+        for deal in deals_response.deals:
             existing = self.deals.get_by_deal_id(deal.deal_id) if deal.deal_id else None
             payload = {
                 "game_id": game.id,
@@ -159,21 +161,22 @@ class GameAggregatorService:
         if not game_id:
             return None
 
-        deals_data = await self.cheapshark.get_game_deals(game_id)
-        if not deals_data:
+        deals_response = await self.cheapshark.get_game_deals(game_id)
+        if not deals_response:
             return None
 
         game = self.games.get_by_external_id(game_id)
         if not game:
             game = self.games.create({
                 "external_id": game_id,
-                "title": deals_data["title"],
-                "image_url": deals_data.get("image_url"),
+                "title": deals_response.title,
+                "image_url": deals_response.image_url,
             })
 
         created_deals = 0
         now = datetime.now(timezone.utc)
-        for deal in deals_data["deals"]:
+
+        for deal in deals_response.deals:
             existing = self.deals.get_by_deal_id(deal.deal_id) if deal.deal_id else None
             payload = {
                 "game_id": game.id,
@@ -247,17 +250,17 @@ class GameAggregatorService:
         if not game:
             return None
 
-        deals_data = await self.cheapshark.get_game_deals(game.external_id)
-        if not deals_data:
+        deals_response = await self.cheapshark.get_game_deals(game.external_id)
+        if not deals_response:
             return None
 
         now = datetime.now(timezone.utc)
         deal_changes: List[DealPriceChange] = []
         previous_prices: List[float] = []
         current_prices: List[float] = []
-        best_current: Optional[Dict[str, Any]] = None
+        best_current = None
 
-        for deal in deals_data["deals"]:
+        for deal in deals_response.deals:
             if not deal.deal_id:
                 continue
 
@@ -323,7 +326,8 @@ class GameAggregatorService:
             current_best_price=current_best,
             best_store_name=best_current["store_name"] if best_current else None,
             best_deal_id=best_current["deal_id"] if best_current else None,
-            is_lower=(current_best < previous_best) if (previous_best is not None and current_best is not None) else None,
+            is_lower=(current_best < previous_best) if (
+                        previous_best is not None and current_best is not None) else None,
         )
 
         return GamePriceChangeResponse(
