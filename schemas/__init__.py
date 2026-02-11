@@ -7,6 +7,24 @@ from schemas.game_search import GameSearchResponse
 from schemas.price_change import GamePriceChangeResponse, DealPriceChange, BestPriceChange
 from schemas.monitoring import MonitoringStats, GameCheckResult, MonitoringResponse
 from schemas.price_alert import PriceAlertResponse
+from schemas.requests import (
+    SearchGamesQuery,
+    LookupGameQuery,
+    DealsQuery,
+    TrackGameByTitleQuery,
+    TrackGameByIdQuery,
+    PaginationQuery,
+    GameIdPath,
+    DealIdPath,
+)
+from schemas.responses import (
+    MessageResponse,
+    TrackGameResponse,
+    TrackDealResponse,
+    RootResponse,
+    StoreImages,
+    StoreResponse,
+)
 
 __all__ = [
     "GameResponse",
@@ -22,4 +40,18 @@ __all__ = [
     "GameCheckResult",
     "MonitoringResponse",
     "PriceAlertResponse",
+    "SearchGamesQuery",
+    "LookupGameQuery",
+    "DealsQuery",
+    "TrackGameByTitleQuery",
+    "TrackGameByIdQuery",
+    "PaginationQuery",
+    "GameIdPath",
+    "DealIdPath",
+    "MessageResponse",
+    "TrackGameResponse",
+    "TrackDealResponse",
+    "RootResponse",
+    "StoreImages",
+    "StoreResponse",
 ]
